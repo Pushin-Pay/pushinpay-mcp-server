@@ -1,4 +1,4 @@
-# @pushinpay/mcp-server
+# @pushinpaybr/mcp-server
 
 Servidor [MCP](https://modelcontextprotocol.io) oficial da **PushinPay**. Conecta agentes de IA (Claude Desktop, Claude Code, Cursor) à API PushinPay para operações PIX — sem escrever código de integração.
 
@@ -19,7 +19,7 @@ Servidor [MCP](https://modelcontextprotocol.io) oficial da **PushinPay**. Conect
 Não precisa clonar nada — roda direto via `npx`:
 
 ```bash
-npx -y @pushinpay/mcp-server
+npx -y @pushinpaybr/mcp-server
 ```
 
 O servidor lê a configuração de variáveis de ambiente:
@@ -40,7 +40,7 @@ Adicione ao seu arquivo de config MCP:
   "mcpServers": {
     "pushinpay": {
       "command": "npx",
-      "args": ["-y", "@pushinpay/mcp-server"],
+      "args": ["-y", "@pushinpaybr/mcp-server"],
       "env": {
         "PUSHINPAY_TOKEN": "seu_token_aqui",
         "PUSHINPAY_ENV": "sandbox"

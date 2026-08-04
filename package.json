@@ -1,5 +1,5 @@
 {
-  "name": "@pushinpay/mcp-server",
+  "name": "@pushinpaybr/mcp-server",
   "version": "0.1.0",
   "description": "Servidor MCP oficial da PushinPay — permite que agentes de IA (Claude, Cursor) consultem saldo e criem cobranças PIX.",
   "type": "module",

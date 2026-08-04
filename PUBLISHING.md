@@ -1,12 +1,12 @@
 # Publicação — checklist
 
-Passo a passo para publicar o `@pushinpay/mcp-server` no npm e registrá-lo no
+Passo a passo para publicar o `@pushinpaybr/mcp-server` no npm e registrá-lo no
 MCP Registry. **Requer credenciais corporativas** — não rode com conta pessoal.
 
 ## Pré-requisitos (item 2 do card — governança)
 
 - [ ] Org GitHub `Pushin-Pay` criada, com este repo em `github.com/Pushin-Pay/pushinpay-mcp-server`.
-- [ ] Org npm `@pushinpay` criada, com 2FA obrigatório para publicação.
+- [ ] Org npm `@pushinpaybr` criada, com 2FA obrigatório para publicação.
 - [ ] Você é membro com permissão de publish em ambas.
 
 ## 1. Git remoto
@@ -22,7 +22,7 @@ git push -u origin main
 ## 2. Publicar no npm
 
 ```bash
-npm login --scope=@pushinpay          # conta corporativa + 2FA
+npm login --scope=@pushinpaybr          # conta corporativa + 2FA
 npm run build                         # gera dist/ (também roda no prepublishOnly)
 npm publish --access public           # pacote com escopo precisa de --access public
 ```
@@ -30,7 +30,7 @@ npm publish --access public           # pacote com escopo precisa de --access pu
 Teste em máquina limpa depois:
 
 ```bash
-PUSHINPAY_TOKEN=xxx npx -y @pushinpay/mcp-server
+PUSHINPAY_TOKEN=xxx npx -y @pushinpaybr/mcp-server
 ```
 
 ## 3. Registrar no MCP Registry
@@ -48,7 +48,7 @@ mcp-publisher login
 mcp-publisher publish
 ```
 
-> `server.json` já está preenchido (npm `@pushinpay/mcp-server`, env
+> `server.json` já está preenchido (npm `@pushinpaybr/mcp-server`, env
 > `PUSHINPAY_TOKEN`/`PUSHINPAY_ENV`). Ajuste a versão do `$schema` se o registry
 > tiver atualizado o formato.
 

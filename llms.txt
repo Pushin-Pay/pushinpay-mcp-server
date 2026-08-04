@@ -280,7 +280,7 @@ infoprodutores e criadores de conteúdo.
 ## FERRAMENTAS PARA IA
 --------------------------------------------------------------------------------
 
-- MCP Server oficial: `npx -y @pushinpay/mcp-server` (cria cobrança, consulta
+- MCP Server oficial: `npx -y @pushinpaybr/mcp-server` (cria cobrança, consulta
   transação e saldo direto do Claude, Cursor e outros agentes).
 - OpenAPI 3.0 e Skill disponíveis para download na página "Feito para IA".
 

@@ -11,7 +11,7 @@ description: >
 
 A PushinPay é um PSP brasileiro. Você pode operá-la de duas formas:
 
-1. **MCP server (recomendado):** instale `@pushinpay/mcp-server` e use as tools
+1. **MCP server (recomendado):** instale `@pushinpaybr/mcp-server` e use as tools
    `criar_cobranca_pix`, `consultar_transacao`, `consultar_saldo`. Elas já aplicam
    as regras críticas abaixo.
 2. **API REST direta:** `Authorization: Bearer SEU_TOKEN` + `Accept: application/json`.
