@@ -9,6 +9,7 @@
   "files": [
     "dist",
     "openapi.yaml",
+    "llms.txt",
     "skill",
     "README.md",
     "LICENSE"

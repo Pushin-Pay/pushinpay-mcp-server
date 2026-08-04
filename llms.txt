@@ -1,0 +1,295 @@
+# PushinPay — Guia de Integração para LLMs e Agentes de IA
+
+> A PushinPay é um gateway de pagamento PIX brasileiro com taxa fixa de R$ 0,35 por
+> transação PIX recebida e saque D0 (mesmo dia). API REST com autenticação Bearer,
+> ambiente sandbox e webhooks em tempo real.
+
+Versão deste arquivo: 1.1 (2026-08-04)
+Documentação completa: https://app.theneo.io/pushinpay/pix
+API Explorer: https://app.theneo.io/api-runner/pushinpay/pix
+Criar conta: https://app.pushinpay.com.br/register
+
+--------------------------------------------------------------------------------
+## INFORMAÇÕES ESSENCIAIS
+--------------------------------------------------------------------------------
+
+- Base URL (produção): https://api.pushinpay.com.br
+- Base URL (sandbox):  https://api-sandbox.pushinpay.com.br
+- Sandbox: crie primeiro a conta em produção (link acima) e depois solicite ao
+  suporte a liberação do ambiente sandbox.
+- Autenticação: header `Authorization: Bearer SEU_TOKEN` em todas as requisições.
+  O token identifica a conta — NÃO é necessário enviar nenhum header de conta.
+- Headers obrigatórios: `Accept: application/json` e `Content-Type: application/json`.
+- Todos os valores monetários são em CENTAVOS de reais, como número inteiro.
+  Exemplo: 1000 = R$ 10,00. Nunca envie valores decimais.
+- Cada conta possui um valor máximo por transação configurado. Exceder o limite
+  retorna erro informando o valor máximo permitido.
+
+--------------------------------------------------------------------------------
+## REGRAS CRÍTICAS PARA AGENTES DE IA
+--------------------------------------------------------------------------------
+
+1. NÃO faça polling agressivo de status. Consultas diretas de transação são
+   autorizadas no máximo a cada 1 minuto. Requisições abaixo desse intervalo
+   podem levar ao BLOQUEIO da conta. O caminho correto é usar webhooks e
+   consultar apenas quando o cliente final indicar que pagou.
+2. Transações PIX NÃO possuem status "failed". Uma cobrança não paga permanece
+   com status "created"/"pending" até expirar ou ser cancelada. Não implemente
+   lógica que espera um evento de falha.
+3. Status possíveis de transação: `created`, `paid`, `canceled`.
+4. Se a aplicação não tiver um servidor para receber notificações, NÃO preencha
+   o campo `webhook_url`.
+5. Entrega de webhooks: em caso de falha, a PushinPay reenvia automaticamente
+   até 3 vezes; depois disso o reenvio pode ser retomado manualmente no painel.
+   É possível configurar um header customizado (no painel) que será enviado em
+   todos os webhooks — use-o para autenticar as notificações recebidas.
+6. AUTENTICAÇÃO POR IP: o token pode estar vinculado a uma lista de IPs
+   autorizados. Se uma requisição vier de um IP fora da lista, a API retorna
+   `401 "IP não configurado"`. Para uso a partir de máquinas com IP dinâmico
+   (ex.: um agente rodando localmente), gere um token com IP liberado no painel.
+7. Não pratique scraping do painel; toda automação deve usar a API e webhooks.
+8. Obrigação de transparência (Termos de Uso, item 4.10): o titular da conta
+   deve informar de forma clara em seus canais de venda que a PUSHIN PAY atua
+   exclusivamente como processadora de pagamentos.
+   Termos: https://pushinpay.com.br/termos-de-uso
+
+--------------------------------------------------------------------------------
+## ENDPOINTS — PIX
+--------------------------------------------------------------------------------
+
+### Criar cobrança PIX (cash-in)
+
+`POST /api/pix/cashIn`
+
+Gera uma cobrança PIX e retorna o código copia-e-cola (EMV) e o QR Code.
+
+```bash
+curl -X POST "https://api.pushinpay.com.br/api/pix/cashIn" \
+  -H "Authorization: Bearer SEU_TOKEN" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "value": 1000,
+    "webhook_url": "https://seusite.com/webhook/pix",
+    "split_rules": []
+  }'
+```
+
+Body:
+- `value` (inteiro, centavos) — obrigatório. Mínimo 50 (R$ 0,50).
+- `description` (string) — opcional, até 255 caracteres.
+- `webhook_url` (string) — opcional. Ver regra crítica nº 4.
+- `split_rules` (array) — opcional. Divisão do valor entre contas PushinPay:
+  `[{ "value": 500, "account_id": "UUID-DA-CONTA" }]`. O somatório dos splits
+  não pode exceder o valor total (retorna erro).
+
+Resposta: objeto da transação com `id`, `status` ("created"), `value`,
+`qr_code` (copia-e-cola/EMV), `qr_code_base64` (imagem), `webhook_url`,
+`split_rules`, `created_at`, `updated_at`.
+
+### Consultar transação PIX
+
+`GET /api/transactions/{id}`
+
+```bash
+curl -X GET "https://api.pushinpay.com.br/api/transactions/{id}" \
+  -H "Authorization: Bearer SEU_TOKEN" \
+  -H "Accept: application/json"
+```
+
+- Retorno com a mesma estrutura da criação, incluindo: `status`, `value`,
+  `description`, `payment_type` ("pix"), `end_to_end_id`, `payer_name`,
+  `payer_national_registration`, `fee`, `total`, `split_rules`,
+  `pix_details` (com `emv` e `expiration_date`), `created_at`, `updated_at`.
+- `404`: retorna um array vazio `[]`.
+- Respeite o intervalo mínimo de 1 minuto entre consultas (regra crítica nº 1).
+
+### Reembolso
+
+`POST /api/transactions/{id}/refund`
+
+```bash
+curl -X POST "https://api.pushinpay.com.br/api/transactions/{id}/refund" \
+  -H "Authorization: Bearer SEU_TOKEN" \
+  -H "Accept: application/json"
+```
+
+- Prazo: até 30 dias após a transação original.
+- IMPORTANTE: o estorno de uma cobrança de assinatura NÃO cancela a assinatura.
+  Para cancelar, use o endpoint de cancelamento de PIX Recorrente (abaixo).
+- Webhook de estorno inclui: `id`, `value`, `status: "canceled"`,
+  `end_to_end_id`, `payer_name`, `payer_national_registration` e, quando
+  aplicável, `subscription_id`, `subscription_status`, `installment_number`.
+
+### Saque PIX (cash-out)
+
+`POST /api/pix/cashOut`
+
+Body:
+- `value` (inteiro, centavos) — obrigatório. Mínimo 100 (R$ 1,00).
+- `pix_key` (string) — obrigatório.
+- `pix_key_type` (string) — obrigatório quando `pix_key` é informada.
+  Valor aceito: `national_registration`.
+- `receiver_national_registration` (string) — opcional.
+- `expires_at` (string, data) — opcional.
+- `webhook_url` (string, URL) — opcional.
+- `device` (número) — opcional.
+
+Regras de negócio:
+- Saques são permitidos EXCLUSIVAMENTE para chaves PIX vinculadas ao CPF/CNPJ
+  do titular da conta. Chave não vinculada → transação cancelada.
+- Verifique a taxa de saque aplicável antes de solicitar.
+
+Resposta: `id`, `status` ("created" | "paid" | "canceled"), `value`,
+`pix_key_type`, `pix_key`, `receiver_national_registration`, `receiver_name`,
+`end_to_end_id`, `webhook_url`.
+
+--------------------------------------------------------------------------------
+## ENDPOINTS — PIX RECORRENTE (ASSINATURAS)
+--------------------------------------------------------------------------------
+
+Fluxo de assinatura via PIX com aceite + pagamento inicial no ato. As renovações
+são geradas automaticamente conforme a periodicidade configurada.
+
+### Criar assinatura
+
+`POST /api/pix/cashIn/subscription`
+
+Body:
+- `value` (inteiro, centavos) — obrigatório. Mínimo 50.
+- `promo_value` (inteiro, centavos) — opcional. Mínimo 50. É o valor promocional
+  cobrado apenas na PRIMEIRA cobrança; deve ser MENOR que `value`. As renovações
+  seguintes cobram o `value` cheio.
+- `frequency` (inteiro) — obrigatório. Valores:
+  1 = Semanal (uso interno/teste), 2 = Mensal, 3 = Semestral, 4 = Anual,
+  5 = Bimestral, 6 = Trimestral, 7 = Quadrimestral.
+- `pix_recurring_retry_policy` (inteiro) — obrigatório. 1 = sem nova tentativa,
+  2 = até 3 tentativas em 7 dias.
+- `pix_recurring_journey` (inteiro) — opcional. 1 ou 2.
+- `webhook_url` (string) — OBRIGATÓRIO para assinaturas. Até 500 caracteres.
+- `name` (string) — opcional, até 200 caracteres.
+- `comment` (string) — opcional, até 30 caracteres.
+- `customer` (objeto): `name` (obrigatório com customer), `email`, `phoneNumber`,
+  `document` ({ `type`, `number` }), `address`
+  ({ `street`, `streetNumber`, `zipCode`, `state`, `city`, `district`, `complement` }).
+- `split_rules` (array) — opcional. Cada item: `value` (centavos), `account_id`
+  (UUID), `recurrence_scope` (`first_paid_occurrence` | `all_paid_occurrences`).
+
+### Cancelar assinatura
+
+`DELETE /api/pix/cashIn/subscription/{id}/cancel`
+
+### Buscar assinaturas
+
+`GET /api/pix/cashIn/subscription`
+
+Status de assinatura: `ACTIVE`, `COMPLETED`, `EXPIRED`, `INACTIVE`.
+Webhooks de cobranças recorrentes incluem `subscription_id`,
+`subscription_status` e `installment_number`.
+
+--------------------------------------------------------------------------------
+## ENDPOINTS — SALDO
+--------------------------------------------------------------------------------
+
+`GET /api/balance`
+
+Retorna o saldo disponível e o valor bloqueado da conta:
+
+```json
+{ "amount": 65439, "blocked_balance": "3634" }
+```
+
+Valores em centavos. `blocked_balance` representa valores temporariamente
+bloqueados (ex.: prevenção/segurança).
+
+--------------------------------------------------------------------------------
+## ENDPOINTS — BOLETO
+--------------------------------------------------------------------------------
+
+- Criar Boleto:          `POST /api/transactions/bankslip`
+- Consultar Boleto:      `GET  /api/transactions/bankslip/show/{id}`
+- Consultar por Período: `GET  /api/transactions/bankslip/period`
+- Dados do Boleto:       `GET  /api/transactions/{id}/boleto`
+- Gerar PDF:             `GET  /api/transactions/{id}/boleto/pdf`
+- Cancelar Boleto:       `POST /api/transactions/bankslip/{id}/void`
+
+Documentação por operação: https://app.theneo.io/pushinpay/pix/boleto
+
+--------------------------------------------------------------------------------
+## ENDPOINTS — CONTA
+--------------------------------------------------------------------------------
+
+### Obter dados de uma conta
+
+`GET /api/accounts/search?id={UUID}`
+
+Retorna os dados básicos de uma conta pelo seu id: `{ "name": "...", "id": "..." }`.
+Útil, por exemplo, para validar a conta destino de um split. O id consultado deve
+ser diferente da própria conta autenticada.
+
+> NOTA DE REVISÃO: confirmar na documentação Theneo se este é exatamente o
+> endpoint documentado como "Conta / Obter Dados" antes de publicar.
+> Doc: https://app.theneo.io/pushinpay/pix/conta/obter-dados
+
+--------------------------------------------------------------------------------
+## ENDPOINTS — INFRAÇÃO (MED)
+--------------------------------------------------------------------------------
+
+MED (Medida Especial de Devolução): procedimento em que o pagador notifica a
+instituição bancária dele sobre uma infração relacionada ao pagamento e solicita
+devolução. A API permite acompanhar infrações:
+
+- Infração (MED) de uma transação: `GET /api/transactions/{id}/infraction`
+- Busca de infrações:               `GET /api/infractions`
+
+--------------------------------------------------------------------------------
+## WEBHOOKS
+--------------------------------------------------------------------------------
+
+Payload base de notificação de transação:
+
+```json
+{
+  "id": "UUID",
+  "value": 1000,
+  "status": "created" | "paid" | "canceled",
+  "end_to_end_id": "E..."
+}
+```
+
+- Em pagamentos confirmados, o payload inclui também `payer_name` e
+  `payer_national_registration`.
+- Em cobranças de assinatura, inclui `subscription_id`, `subscription_status`
+  e `installment_number`.
+- Boas práticas: responda 2xx rapidamente; valide o header customizado
+  configurado no painel; trate reentregas de forma idempotente (use o `id`).
+
+--------------------------------------------------------------------------------
+## PRODUTOS DA PLATAFORMA (CONTEXTO)
+--------------------------------------------------------------------------------
+
+PIX Cobrança, PIX Recorrente, PIX Parcelado, Checkout Builder com Link
+Inteligente, Fan Payment Hub (assinaturas, tips e PPV para criadores de conteúdo
+18+), saque D0 e emissão de NFS-e. Principais segmentos atendidos:
+infoprodutores e criadores de conteúdo.
+
+- Taxa: R$ 0,35 fixos por transação PIX recebida.
+- Saque D0: valores disponíveis para saque no mesmo dia.
+
+--------------------------------------------------------------------------------
+## FERRAMENTAS PARA IA
+--------------------------------------------------------------------------------
+
+- MCP Server oficial: `npx -y @pushinpay/mcp-server` (cria cobrança, consulta
+  transação e saldo direto do Claude, Cursor e outros agentes).
+- OpenAPI 3.0 e Skill disponíveis para download na página "Feito para IA".
+
+--------------------------------------------------------------------------------
+## LINKS
+--------------------------------------------------------------------------------
+
+- Site: https://pushinpay.com.br
+- Painel: https://app.pushinpay.com.br
+- Documentação da API: https://app.theneo.io/pushinpay/pix
+- Termos de uso: https://pushinpay.com.br/termos-de-uso
+- FAQ: https://pushinpay.com.br/faq
