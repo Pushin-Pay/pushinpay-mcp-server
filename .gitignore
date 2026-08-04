@@ -7,3 +7,11 @@ dist
 .idea/
 .vscode/
 .DS_Store
+
+# MCP Registry DNS auth — chave privada NUNCA vai pro Git
+key.pem
+*.pem
+mcp-registry-auth
+
+# binário da CLI do registry
+mcp-publisher

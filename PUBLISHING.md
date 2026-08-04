@@ -33,24 +33,42 @@ Teste em máquina limpa depois:
 PUSHINPAY_TOKEN=xxx npx -y @pushinpaybr/mcp-server
 ```
 
-## 3. Registrar no MCP Registry
+## 3. Registrar no MCP Registry (namespace `br.com.pushinpay` — DNS)
 
-Namespace: `br.com.pushinpay/mcp` (verificação por domínio).
+Pré-requisitos: pacote npm **0.1.1** (com `mcpName`) já publicado no passo 2, e
+`server.json` válido (`./mcp-publisher validate`).
 
+### 3.1 Instalar a CLI
 ```bash
-# instalar a CLI oficial do registry
-npm i -g @modelcontextprotocol/publisher   # confirmar nome atual da CLI
-
-# autenticar (verificação de domínio via DNS/HTTP conforme instrução da CLI)
-mcp-publisher login
-
-# publicar usando o manifesto server.json deste repo
-mcp-publisher publish
+curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
 ```
 
-> `server.json` já está preenchido (npm `@pushinpaybr/mcp-server`, env
-> `PUSHINPAY_TOKEN`/`PUSHINPAY_ENV`). Ajuste a versão do `$schema` se o registry
-> tiver atualizado o formato.
+### 3.2 Registro TXT no DNS de pushinpay.com.br (infra)
+A chave já está em `key.pem` (gitignored). Adicione na raiz do domínio:
+```
+Nome:  @  (pushinpay.com.br)
+Tipo:  TXT
+Valor: v=MCPv1; k=ed25519; p=<PUBLIC_KEY>
+```
+Reobter o valor da chave pública:
+```bash
+echo "v=MCPv1; k=ed25519; p=$(openssl pkey -in key.pem -pubout -outform DER | tail -c 32 | base64)"
+```
+
+### 3.3 Login (após o TXT propagar) e publicar
+```bash
+PRIVATE_KEY="$(openssl pkey -in key.pem -noout -text | grep -A3 'priv:' | tail -n +2 | tr -d ' :\n')"
+./mcp-publisher login dns --domain pushinpay.com.br --private-key "${PRIVATE_KEY}"
+./mcp-publisher publish
+```
+
+### 3.4 Verificar
+```bash
+curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=br.com.pushinpay/mcp"
+```
+
+> `server.json` já está pronto e validado (schema 2025-12-11, `name` = `br.com.pushinpay/mcp`,
+> igual ao `mcpName` do `package.json`). A chave privada (`key.pem`) nunca vai pro Git.
 
 ## 4. Pós-publicação
 
