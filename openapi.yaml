@@ -1,0 +1,445 @@
+openapi: 3.0.3
+info:
+  title: PushinPay API — PIX
+  version: "1.0.0"
+  description: >
+    API REST da PushinPay para operações PIX (gateway de pagamento brasileiro).
+    Autenticação via Bearer token. Todos os valores monetários são em CENTAVOS
+    de reais, como inteiro (ex.: 1000 = R$ 10,00; nunca decimais).
+
+    Regras críticas:
+      - Consulta de transação: no máximo 1x/minuto por transação (polling agressivo
+        pode BLOQUEAR a conta). Prefira webhooks.
+      - Não existe status "failed": uma cobrança não paga fica "created" até
+        expirar ou ser cancelada.
+      - Tokens podem ser atrelados a IP; libere o IP de origem no painel.
+
+    Escopo deste arquivo: núcleo PIX (cobrança, transação, reembolso, saque, saldo,
+    assinaturas). Boleto e Infração (MED) são documentados à parte.
+  contact:
+    name: PushinPay
+    url: https://pushinpay.com.br
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.pushinpay.com.br
+    description: Produção
+  - url: https://api-sandbox.pushinpay.com.br
+    description: Sandbox
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: PIX
+    description: Cobrança, saque e saldo
+  - name: Transações
+    description: Consulta e reembolso
+  - name: Assinaturas
+    description: PIX recorrente
+
+paths:
+  /api/pix/cashIn:
+    post:
+      tags: [PIX]
+      summary: Criar cobrança PIX (cash-in)
+      description: Gera uma cobrança PIX e retorna o copia-e-cola (EMV) e o QR Code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChargeInput"
+      responses:
+        "200":
+          description: Cobrança criada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Charge"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/transactions/{id}:
+    get:
+      tags: [Transações]
+      summary: Consultar transação PIX
+      description: >
+        Retorna os detalhes da transação. Respeite o intervalo mínimo de 1 minuto
+        entre consultas. Quando não encontrada, a API responde 404 com array vazio.
+      parameters:
+        - $ref: "#/components/parameters/TransactionId"
+      responses:
+        "200":
+          description: Transação encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+        "404":
+          description: Não encontrada (retorna array vazio)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {}
+                example: []
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/transactions/{id}/refund:
+    post:
+      tags: [Transações]
+      summary: Reembolsar transação
+      description: >
+        Estorna uma transação (prazo de até 30 dias). Atenção: estornar uma
+        cobrança de assinatura NÃO cancela a assinatura.
+      parameters:
+        - $ref: "#/components/parameters/TransactionId"
+      responses:
+        "200":
+          description: Reembolso efetuado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/pix/cashOut:
+    post:
+      tags: [PIX]
+      summary: Saque PIX (cash-out)
+      description: >
+        Saques são permitidos EXCLUSIVAMENTE para chaves PIX vinculadas ao
+        CPF/CNPJ do titular da conta. Chave não vinculada → transação cancelada.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CashOutInput"
+      responses:
+        "200":
+          description: Saque solicitado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashOut"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/balance:
+    get:
+      tags: [PIX]
+      summary: Consultar saldo
+      description: Saldo disponível e valor bloqueado (em centavos).
+      responses:
+        "200":
+          description: Saldo da conta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Balance"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/pix/cashIn/subscription:
+    post:
+      tags: [Assinaturas]
+      summary: Criar assinatura (PIX recorrente)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubscriptionInput"
+      responses:
+        "200":
+          description: Assinatura criada
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    get:
+      tags: [Assinaturas]
+      summary: Buscar assinaturas
+      responses:
+        "200":
+          description: Lista de assinaturas
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/pix/cashIn/subscription/{id}/cancel:
+    delete:
+      tags: [Assinaturas]
+      summary: Cancelar assinatura
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Assinatura cancelada
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        Envie `Authorization: Bearer SEU_TOKEN`. O token identifica a conta —
+        não é necessário enviar account_id.
+
+  parameters:
+    TransactionId:
+      name: id
+      in: path
+      required: true
+      description: UUID da transação
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Unauthorized:
+      description: Token ausente/ inválido, ou IP não configurado
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ValidationError:
+      description: Dados inválidos
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    SplitRule:
+      type: object
+      required: [value, account_id]
+      properties:
+        value:
+          type: integer
+          minimum: 1
+          description: Parte do split em centavos
+        account_id:
+          type: string
+          description: UUID da conta PushinPay que recebe
+
+    CreateChargeInput:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: integer
+          minimum: 50
+          description: Valor total em centavos (mín. 50)
+        description:
+          type: string
+          maxLength: 255
+          nullable: true
+        webhook_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Só preencha se tiver servidor para receber notificações
+        split_rules:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/SplitRule"
+
+    Charge:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, example: created }
+        value: { type: integer, description: centavos }
+        qr_code: { type: string, description: copia-e-cola / EMV }
+        qr_code_base64: { type: string, description: imagem do QR em base64 }
+        webhook_url: { type: string, nullable: true }
+        split_rules:
+          type: array
+          items: { $ref: "#/components/schemas/SplitRule" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Transaction:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [created, paid, canceled]
+        value: { type: integer, description: centavos }
+        description: { type: string, nullable: true }
+        payment_type: { type: string, example: pix }
+        end_to_end_id: { type: string, nullable: true }
+        payer_name: { type: string, nullable: true }
+        payer_national_registration: { type: string, nullable: true }
+        fee: { type: integer, nullable: true, description: centavos }
+        total: { type: integer, nullable: true, description: centavos }
+        split_rules:
+          type: array
+          items: { $ref: "#/components/schemas/SplitRule" }
+        pix_details:
+          type: object
+          nullable: true
+          properties:
+            emv: { type: string }
+            expiration_date: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CashOutInput:
+      type: object
+      required: [value, pix_key]
+      properties:
+        value:
+          type: integer
+          minimum: 100
+          description: Valor em centavos (mín. 100 = R$ 1,00)
+        pix_key:
+          type: string
+          description: Chave PIX vinculada ao CPF/CNPJ do titular
+        pix_key_type:
+          type: string
+          enum: [national_registration]
+          description: Obrigatório quando pix_key é informada
+        receiver_national_registration:
+          type: string
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        webhook_url:
+          type: string
+          format: uri
+          nullable: true
+        device:
+          type: integer
+          nullable: true
+
+    CashOut:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [created, paid, canceled]
+        value: { type: integer, description: centavos }
+        pix_key_type: { type: string }
+        pix_key: { type: string }
+        receiver_national_registration: { type: string }
+        receiver_name: { type: string }
+        end_to_end_id: { type: string }
+        webhook_url: { type: string, nullable: true }
+
+    Balance:
+      type: object
+      properties:
+        amount:
+          type: integer
+          description: Saldo disponível em centavos
+          example: 65439
+        blocked_balance:
+          type: string
+          description: Valor bloqueado em centavos (string)
+          example: "3634"
+
+    Customer:
+      type: object
+      required: [name, document]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        phoneNumber: { type: string }
+        document:
+          type: object
+          required: [type, number]
+          properties:
+            type: { type: string }
+            number: { type: string }
+        address:
+          type: object
+          properties:
+            street: { type: string }
+            streetNumber: { type: string }
+            zipCode: { type: string, example: "01234-567" }
+            state: { type: string }
+            city: { type: string }
+            district: { type: string }
+            complement: { type: string, nullable: true }
+
+    CreateSubscriptionInput:
+      type: object
+      required: [value, frequency, pix_recurring_retry_policy, webhook_url]
+      properties:
+        value:
+          type: integer
+          minimum: 50
+          description: Valor da recorrência em centavos
+        promo_value:
+          type: integer
+          minimum: 50
+          description: Valor promocional da 1ª cobrança (deve ser menor que value)
+        frequency:
+          type: integer
+          enum: [1, 2, 3, 4, 5, 6, 7]
+          description: >
+            1=Semanal, 2=Mensal, 3=Semestral, 4=Anual,
+            5=Bimestral, 6=Trimestral, 7=Quadrimestral (1 é somente teste)
+        pix_recurring_retry_policy:
+          type: integer
+          enum: [1, 2]
+          description: 1=sem nova tentativa, 2=até 3 tentativas em 7 dias
+        pix_recurring_journey:
+          type: integer
+          enum: [1, 2]
+          nullable: true
+        webhook_url:
+          type: string
+          maxLength: 500
+          description: Obrigatório para assinaturas
+        name:
+          type: string
+          maxLength: 200
+          nullable: true
+        comment:
+          type: string
+          maxLength: 30
+          nullable: true
+        customer:
+          $ref: "#/components/schemas/Customer"
+        split_rules:
+          type: array
+          minItems: 1
+          nullable: true
+          items:
+            type: object
+            required: [value, account_id, recurrence_scope]
+            properties:
+              value: { type: integer, minimum: 1 }
+              account_id: { type: string, format: uuid }
+              recurrence_scope:
+                type: string
+                enum: [first_paid_occurrence, all_paid_occurrences]
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Mensagem de erro

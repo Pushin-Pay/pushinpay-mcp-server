@@ -1,0 +1,34 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "br.com.pushinpay/mcp",
+  "description": "Servidor MCP oficial da PushinPay — cobranças PIX, consulta de transações e saldo para agentes de IA.",
+  "repository": {
+    "url": "https://github.com/Pushin-Pay/pushinpay-mcp-server",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registry_type": "npm",
+      "identifier": "@pushinpay/mcp-server",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environment_variables": [
+        {
+          "name": "PUSHINPAY_TOKEN",
+          "description": "Token da conta PushinPay (gerado no painel).",
+          "is_required": true,
+          "is_secret": true
+        },
+        {
+          "name": "PUSHINPAY_ENV",
+          "description": "Ambiente: sandbox (padrão) ou production.",
+          "is_required": false,
+          "default": "sandbox"
+        }
+      ]
+    }
+  ]
+}

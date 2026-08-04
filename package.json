@@ -1,0 +1,55 @@
+{
+  "name": "@pushinpay/mcp-server",
+  "version": "0.1.0",
+  "description": "Servidor MCP oficial da PushinPay — permite que agentes de IA (Claude, Cursor) consultem saldo e criem cobranças PIX.",
+  "type": "module",
+  "bin": {
+    "pushinpay-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "openapi.yaml",
+    "skill",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pushin-Pay/pushinpay-mcp-server.git"
+  },
+  "homepage": "https://pushinpay.com.br",
+  "bugs": {
+    "url": "https://github.com/Pushin-Pay/pushinpay-mcp-server/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prepublishOnly": "npm run build",
+    "build": "tsc",
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "smoke": "tsx --env-file=.env scripts/smoke.ts",
+    "inspect": "npm run build && npx @modelcontextprotocol/inspector node --env-file-if-exists=.env dist/index.js"
+  },
+  "keywords": [
+    "pushinpay",
+    "mcp",
+    "model-context-protocol",
+    "pix",
+    "pagamentos"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}
